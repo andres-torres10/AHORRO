@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dashboard - Ingeniería del Ahorro</title>
+  <link rel="stylesheet" href="css/variables.css">
+  <link rel="stylesheet" href="css/main.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+<div id="appLayout" class="app-layout"></div>
+
+<script src="js/api.js"></script>
+<script src="js/layout.js"></script>
+<script>
+if (!Auth.requireAuth()) throw new Error('Not authenticated');
+
+const user = Api.getUser();
+
+document.getElementById('appLayout').innerHTML = `
+  ${renderLayout('dashboard.html')}
+  <div class="main-content" id="mainContent">
+    ${renderTopbar(`${getGreeting()}, ${user?.nombre?.split(' ')[0] || 'Usuario'}`, '', true)}
+    <div class="page-content" id="pageContent">
+      <div class="page-section">
+
+        <!-- Stats Grid -->
+        <div class="stats-grid" id="statsGrid">
+          ${[1,2,3,4,5,6].map(() => `<div class="stat-card" style="height:120px;background:var(--gray-light)"></div>`).join('')}
+        </div>
+
+        <div class="grid-2" style="margin-bottom:24px">
+          <!-- Semáforo -->
+          <div class="card">
+            <div class="card-header">
+              <span class="card-title">Estado Financiero</span>
+            </div>
+            <div class="card-body">
+              <div id="semaforoSection">
+                <div style="height:80px;background:var(--gray-light);border-radius:8px"></div>
+              </div>
+              <div id="consejosSection" style="margin-top:16px"></div>
+            </div>
+          </div>
+
+          <!-- Acceso Rápido -->
+          <div class="card">
+            <div class="card-header">
+              <span class="card-title">Acceso Rápido</span>
+            </div>
+            <div class="card-body">
+              <div class="quick-actions">
+                <button class="quick-btn" onclick="window.location.href='ingresos.html'">
+                  <div class="qb-icon" style="background:#D5F5E3">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#27AE60" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+                  </div>
+                  <span>Agregar Ingreso</span>
+                </button>
+                <button class="quick-btn" onclick="window.location.href='gastos-fijos.html'">
+                  <div class="qb-icon" style="background:#FADBD8">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#E74C3C" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+                  </div>
+                  <span>Gasto Fijo</span>
+                </button>
+                <button class="quick-btn" onclick="window.location.href='gastos-hormiga.html'">
+                  <div class="qb-icon" style="background:#FDEBD0">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#F39C12" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                  </div>
+                  <span>Gasto Menor</span>
+                </button>
+                <button class="quick-btn" onclick="window.location.href='deudas.html'">
+                  <div class="qb-icon" style="background:#D6EAF8">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#2980B9" stroke-width="2"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
+                  </div>
+                  <span>Agregar Deuda</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Metas de Ahorro -->
+        <div class="card" style="margin-bottom:24px">
+          <div class="card-header">
+            <span class="card-title">Metas de Ahorro</span>
+            <a href="metas.html" class="btn btn-outline btn-sm">Ver todas</a>
+          </div>
+          <div class="card-body" id="metasSection">
+            <div style="height:60px;background:var(--gray-light);border-radius:8px"></div>
+          </div>
+        </div>
+
+        <!-- Mini Chart -->
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">Resumen del Mes</span>
+          </div>
+          <div class="card-body">
+            <canvas id="miniChart" height="120"></canvas>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+`;
+
+Sidebar.init();
+MonthSelector.init();
+MonthSelector.onChange((mes, anio) => loadDashboard(mes, anio));
+
+let miniChart = null;
+
+// SVGs para stat cards
+const statIcons = {
+  income: `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>`,
+  fixed:  `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>`,
+  small:  `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>`,
+  debt:   `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>`,
+  saving: `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21V5a2 2 0 0 0-2-2H7a2 2 0 0 0-2 2v16m14 0H5m14 0h2M5 21H3"/></svg>`,
+  balance:`<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="20" x2="12" y2="4"/><path d="M6 12l6-8 6 8"/><path d="M4 20h16"/></svg>`,
+};
+
+async function loadDashboard(mes, anio) {
+  const res = await Api.get(`/dashboard?mes=${mes}&anio=${anio}`);
+  if (!res?.success) return;
+  const d = res.data;
+
+  // Stats
+  const statsData = [
+    { label: 'Ingresos Totales',   value: d.totalIngresos,      icon: statIcons.income,  color: '#27AE60', bg: '#D5F5E3' },
+    { label: 'Gastos Fijos',       value: d.totalGastosFijos,   icon: statIcons.fixed,   color: '#E74C3C', bg: '#FADBD8' },
+    { label: 'Gastos Menores',     value: d.totalGastosHormiga, icon: statIcons.small,   color: '#F39C12', bg: '#FDEBD0' },
+    { label: 'Deudas Pendientes',  value: d.totalDeudas,        icon: statIcons.debt,    color: '#2980B9', bg: '#D6EAF8' },
+    { label: 'Ahorro Disponible',  value: d.ahorroDisponible,   icon: statIcons.saving,  color: '#27AE60', bg: '#D5F5E3' },
+    { label: 'Balance Neto',       value: d.balanceNeto,        icon: statIcons.balance, color: d.balanceNeto >= 0 ? '#27AE60' : '#E74C3C', bg: d.balanceNeto >= 0 ? '#D5F5E3' : '#FADBD8' },
+  ];
+
+  document.getElementById('statsGrid').innerHTML = statsData.map(s => `
+    <div class="stat-card" style="--card-color:${s.color};--card-bg:${s.bg}">
+      <div class="stat-icon" style="color:${s.color}">${s.icon}</div>
+      <div class="stat-label">${s.label}</div>
+      <div class="stat-value" style="color:${s.color}">${Fmt.currency(s.value)}</div>
+      <div class="stat-change ${s.value >= 0 ? 'up' : 'down'}">
+        ${Fmt.percent(s.label === 'Ahorro Disponible' ? d.porcentajeAhorro : 0)} del ingreso
+      </div>
+    </div>
+  `).join('');
+
+  // Semáforo
+  const sClass = d.semaforo?.toLowerCase() || 'verde';
+  const semaforoLabel = d.semaforo === 'VERDE' ? 'Finanzas Saludables' : d.semaforo === 'AMARILLO' ? 'Finanzas Ajustadas' : 'Atención Requerida';
+  document.getElementById('semaforoSection').innerHTML = `
+    <div class="semaforo ${sClass}">
+      <div class="semaforo-dot"></div>
+      <div>
+        <div style="font-weight:700;font-size:1rem;margin-bottom:4px">${semaforoLabel}</div>
+        <div style="font-size:0.85rem;opacity:0.85">${d.mensajeSemaforo}</div>
+      </div>
+      <div style="margin-left:auto;text-align:right">
+        <div style="font-size:1.4rem;font-weight:800">${Fmt.percent(d.porcentajeGastado)}</div>
+        <div style="font-size:0.72rem;opacity:0.7">gastado</div>
+      </div>
+    </div>
+    <div style="margin-top:12px">
+      <div style="display:flex;justify-content:space-between;font-size:0.75rem;margin-bottom:4px">
+        <span>Nivel de gasto</span><span>${Fmt.percent(d.porcentajeGastado)}</span>
+      </div>
+      <div class="progress-bar-container">
+        <div class="progress-bar ${sClass === 'verde' ? 'success' : sClass === 'amarillo' ? 'warning' : 'danger'}"
+             style="width:${Math.min(100, d.porcentajeGastado)}%"></div>
+      </div>
+    </div>
+  `;
+
+  // Consejos
+  document.getElementById('consejosSection').innerHTML = `
+    <div style="font-weight:600;font-size:0.85rem;margin-bottom:8px;color:var(--text-muted)">Recomendaciones</div>
+    ${(d.consejos || []).map(c => `
+      <div style="padding:8px 12px;background:var(--gray-light);border-radius:8px;font-size:0.82rem;margin-bottom:6px">${c}</div>
+    `).join('')}
+  `;
+
+  // Metas
+  if (d.metas?.length > 0) {
+    document.getElementById('metasSection').innerHTML = d.metas.map(m => `
+      <div style="margin-bottom:16px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+          <span style="font-weight:600;font-size:0.9rem">${m.nombre}</span>
+          <span style="font-size:0.8rem;color:var(--text-muted)">${Fmt.currency(m.valorAhorrado)} / ${Fmt.currency(m.valorMeta)}</span>
+        </div>
+        <div class="progress-bar-container">
+          <div class="progress-bar success" style="width:${m.porcentaje}%;background:${m.color}"></div>
+        </div>
+        <div style="text-align:right;font-size:0.75rem;color:var(--text-muted);margin-top:3px">${Fmt.percent(m.porcentaje)}</div>
+      </div>
+    `).join('');
+  } else {
+    document.getElementById('metasSection').innerHTML = `
+      <div class="empty-state" style="padding:20px">
+        <div class="empty-icon">
+          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="var(--gray)" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>
+        </div>
+        <h3>Sin metas activas</h3>
+        <p><a href="metas.html" style="color:var(--primary)">Crear una meta de ahorro</a></p>
+      </div>
+    `;
+  }
+
+  // Mini Chart
+  const ctx = document.getElementById('miniChart').getContext('2d');
+  if (miniChart) miniChart.destroy();
+  miniChart = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: ['Ingresos', 'Gastos Fijos', 'Gastos Menores', 'Ahorro'],
+      datasets: [{
+        data: [
+          parseFloat(d.totalIngresos) || 0,
+          parseFloat(d.totalGastosFijos) || 0,
+          parseFloat(d.totalGastosHormiga) || 0,
+          parseFloat(d.ahorroDisponible) || 0
+        ],
+        backgroundColor: ['#27AE60', '#E74C3C', '#F39C12', '#1B4F72'],
+        borderRadius: 8,
+        borderSkipped: false
+      }]
+    },
+    options: {
+      responsive: true,
+      plugins: { legend: { display: false } },
+      scales: {
+        y: {
+          ticks: { callback: v => Fmt.currency(v), font: { family: 'Poppins', size: 11 } },
+          grid: { color: 'rgba(0,0,0,0.05)' }
+        },
+        x: { grid: { display: false }, ticks: { font: { family: 'Poppins', size: 11 } } }
+      }
+    }
+  });
+}
+
+function getGreeting() {
+  const h = new Date().getHours();
+  return h < 12 ? 'Buenos días' : h < 18 ? 'Buenas tardes' : 'Buenas noches';
+}
+
+loadDashboard(MonthSelector.mes, MonthSelector.anio);
+</script>
+</body>
+</html>

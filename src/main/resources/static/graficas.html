@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Gráficas - Ingeniería del Ahorro</title>
+  <link rel="stylesheet" href="css/variables.css">
+  <link rel="stylesheet" href="css/main.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+<div id="appLayout" class="app-layout"></div>
+<script src="js/api.js"></script>
+<script src="js/layout.js"></script>
+<script>
+if (!Auth.requireAuth()) throw new Error();
+
+document.getElementById('appLayout').innerHTML = `
+  ${renderLayout('graficas.html')}
+  <div class="main-content">
+    ${renderTopbar('Gráficas', 'Visualiza tu situación financiera', true)}
+    <div class="page-content">
+      <div class="page-header">
+        <div><h2>Análisis Gráfico</h2><p>Visualiza tus finanzas con gráficas interactivas</p></div>
+        <div style="display:flex;gap:10px">
+          <select class="form-control" id="filterAnio" style="width:100px">
+            ${[new Date().getFullYear()-1, new Date().getFullYear(), new Date().getFullYear()+1].map(y =>
+              `<option ${y === new Date().getFullYear() ? 'selected' : ''}>${y}</option>`).join('')}
+          </select>
+          <button class="btn btn-primary" onclick="loadAll()">Actualizar</button>
+        </div>
+      </div>
+
+      <div class="grid-2" style="margin-bottom:24px">
+        <div class="card">
+          <div class="card-header"><span class="card-title">Ingresos vs Gastos (Anual)</span></div>
+          <div class="card-body"><canvas id="chartIngVsGas" height="200"></canvas></div>
+        </div>
+        <div class="card">
+          <div class="card-header"><span class="card-title">Distribución de Gastos del Mes</span></div>
+          <div class="card-body"><canvas id="chartDistribucion" height="200"></canvas></div>
+        </div>
+      </div>
+
+      <div class="grid-2" style="margin-bottom:24px">
+        <div class="card">
+          <div class="card-header"><span class="card-title">Ahorro Mensual</span></div>
+          <div class="card-body"><canvas id="chartAhorro" height="200"></canvas></div>
+        </div>
+        <div class="card">
+          <div class="card-header"><span class="card-title">Gastos Menores por Mes</span></div>
+          <div class="card-body"><canvas id="chartHormiga" height="200"></canvas></div>
+        </div>
+      </div>
+    </div>
+  </div>
+`;
+
+Sidebar.init();
+MonthSelector.init();
+
+const meses = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+let charts = {};
+
+function destroyChart(id) { if (charts[id]) { charts[id].destroy(); delete charts[id]; } }
+
+async function loadAll() {
+  const anio = parseInt(document.getElementById('filterAnio').value);
+  const mes = MonthSelector.mes;
+
+  const [resIng, resGF, resGH] = await Promise.all([
+    Api.get(`/ingresos/grafica/${anio}`),
+    Api.get(`/gastos-fijos?mes=${mes}&anio=${anio}`),
+    Api.get(`/gastos-hormiga/grafica/${anio}`)
+  ]);
+
+  const ingData = Array(12).fill(0);
+  const gasData = Array(12).fill(0);
+  if (resIng?.success) resIng.data.forEach(([m, v]) => { ingData[m-1] = parseFloat(v); });
+
+  destroyChart('ingVsGas');
+  charts['ingVsGas'] = new Chart(document.getElementById('chartIngVsGas').getContext('2d'), {
+    type: 'bar',
+    data: {
+      labels: meses,
+      datasets: [
+        { label: 'Ingresos', data: ingData, backgroundColor: 'rgba(39,174,96,0.8)', borderRadius: 6 },
+        { label: 'Gastos', data: gasData, backgroundColor: 'rgba(231,76,60,0.8)', borderRadius: 6 }
+      ]
+    },
+    options: {
+      responsive: true,
+      plugins: { legend: { labels: { font: { family: 'Poppins' } } } },
+      scales: {
+        y: { ticks: { callback: v => Fmt.currency(v), font: { family: 'Poppins', size: 10 } }, grid: { color: 'rgba(0,0,0,0.05)' } },
+        x: { grid: { display: false }, ticks: { font: { family: 'Poppins', size: 11 } } }
+      }
+    }
+  });
+
+  const gastosFijos = resGF?.data || [];
+  const totalFijos = gastosFijos.reduce((s, g) => s + parseFloat(g.valor || 0), 0);
+  const resHM = await Api.get(`/gastos-hormiga?mes=${mes}&anio=${anio}`);
+  const totalHormiga = (resHM?.data || []).reduce((s, g) => s + parseFloat(g.valor || 0), 0);
+  const resDeudas = await Api.get('/deudas');
+  const totalCuotas = (resDeudas?.data || []).filter(d => d.estado === 'Activa').reduce((s, d) => s + parseFloat(d.cuotaMensual || 0), 0);
+
+  destroyChart('dist');
+  charts['dist'] = new Chart(document.getElementById('chartDistribucion').getContext('2d'), {
+    type: 'pie',
+    data: {
+      labels: ['Gastos Fijos', 'Gastos Menores', 'Cuotas Deuda'],
+      datasets: [{ data: [totalFijos, totalHormiga, totalCuotas], backgroundColor: ['#E74C3C','#F39C12','#2980B9'], borderWidth: 0 }]
+    },
+    options: {
+      responsive: true,
+      plugins: {
+        legend: { position: 'bottom', labels: { font: { family: 'Poppins', size: 11 }, padding: 12 } },
+        tooltip: { callbacks: { label: ctx => ` ${Fmt.currency(ctx.raw)}` } }
+      }
+    }
+  });
+
+  const ahorroData = ingData.map((ing, i) => Math.max(0, ing - gasData[i]));
+  destroyChart('ahorro');
+  charts['ahorro'] = new Chart(document.getElementById('chartAhorro').getContext('2d'), {
+    type: 'line',
+    data: {
+      labels: meses,
+      datasets: [{
+        label: 'Ahorro',
+        data: ahorroData,
+        borderColor: '#27AE60',
+        backgroundColor: 'rgba(39,174,96,0.1)',
+        fill: true,
+        tension: 0.4,
+        pointBackgroundColor: '#27AE60',
+        pointRadius: 5
+      }]
+    },
+    options: {
+      responsive: true,
+      plugins: { legend: { display: false } },
+      scales: {
+        y: { ticks: { callback: v => Fmt.currency(v), font: { family: 'Poppins', size: 10 } }, grid: { color: 'rgba(0,0,0,0.05)' } },
+        x: { grid: { display: false }, ticks: { font: { family: 'Poppins', size: 11 } } }
+      }
+    }
+  });
+
+  const hormigaData = Array(12).fill(0);
+  if (resGH?.success) resGH.data.forEach(([m, v]) => { hormigaData[m-1] = parseFloat(v); });
+  destroyChart('hormiga');
+  charts['hormiga'] = new Chart(document.getElementById('chartHormiga').getContext('2d'), {
+    type: 'bar',
+    data: {
+      labels: meses,
+      datasets: [{ label: 'Gastos Menores', data: hormigaData, backgroundColor: 'rgba(243,156,18,0.8)', borderRadius: 6 }]
+    },
+    options: {
+      responsive: true,
+      plugins: { legend: { display: false } },
+      scales: {
+        y: { ticks: { callback: v => Fmt.currency(v), font: { family: 'Poppins', size: 10 } }, grid: { color: 'rgba(0,0,0,0.05)' } },
+        x: { grid: { display: false }, ticks: { font: { family: 'Poppins', size: 11 } } }
+      }
+    }
+  });
+}
+
+document.getElementById('filterAnio').addEventListener('change', loadAll);
+MonthSelector.onChange(loadAll);
+loadAll();
+</script>
+</body>
+</html>

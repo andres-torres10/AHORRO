@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Gastos Hormiga - Ingeniería del Ahorro</title>
+  <link rel="stylesheet" href="css/variables.css">
+  <link rel="stylesheet" href="css/main.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+<div id="appLayout" class="app-layout"></div>
+<script src="js/api.js"></script>
+<script src="js/layout.js"></script>
+<script>
+if (!Auth.requireAuth()) throw new Error();
+
+document.getElementById('appLayout').innerHTML = `
+  ${renderLayout('gastos-hormiga.html')}
+  <div class="main-content">
+    ${renderTopbar('Gastos Menores', 'Los pequeños gastos que se acumulan', true)}
+    <div class="page-content">
+      <div class="page-header">
+        <div><h2>Gastos Menores</h2><p>Controla los pequeños gastos que drenan tu dinero</p></div>
+        <button class="btn btn-warning" onclick="openModal()">+ Agregar Gasto</button>
+      </div>
+
+      <div id="alertaHormiga"></div>
+
+      <div class="stats-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:24px">
+        <div class="stat-card" style="--card-color:#F39C12;--card-bg:#FDEBD0">
+          <div class="stat-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></div>
+          <div class="stat-label">Total del Mes</div>
+          <div class="stat-value text-warning" id="totalMes">$0</div>
+        </div>
+        <div class="stat-card" style="--card-color:#E74C3C;--card-bg:#FADBD8">
+          <div class="stat-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg></div>
+          <div class="stat-label">Registros</div>
+          <div class="stat-value" id="totalReg">0</div>
+        </div>
+        <div class="stat-card" style="--card-color:#1B4F72;--card-bg:rgba(27,79,114,0.1)">
+          <div class="stat-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></div>
+          <div class="stat-label">Promedio Diario</div>
+          <div class="stat-value text-primary" id="promDiario">$0</div>
+        </div>
+        <div class="stat-card" style="--card-color:#27AE60;--card-bg:#D5F5E3">
+          <div class="stat-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21V5a2 2 0 0 0-2-2H7a2 2 0 0 0-2 2v16m14 0H5m14 0h2M5 21H3"/></svg></div>
+          <div class="stat-label">Podrías ahorrar</div>
+          <div class="stat-value text-success" id="potAhorro">$0</div>
+        </div>
+      </div>
+
+      <div class="grid-2" style="margin-bottom:24px">
+        <div class="card" style="grid-column:1/2">
+          <div class="card-header">
+            <span class="card-title">Registros</span>
+            <div class="search-box">
+              <span class="search-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></span>
+              <input type="text" class="form-control" id="searchInput" placeholder="Buscar..." style="width:160px" oninput="filterTable()">
+            </div>
+          </div>
+          <div class="card-body" style="padding:0">
+            <div class="table-container" style="max-height:400px;overflow-y:auto">
+              <table>
+                <thead>
+                  <tr><th>Nombre</th><th>Categoría</th><th>Valor</th><th>Fecha</th><th>Acciones</th></tr>
+                </thead>
+                <tbody id="hormigaBody"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header"><span class="card-title">Por Categoría</span></div>
+          <div class="card-body">
+            <canvas id="catChart" height="200"></canvas>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+`;
+
+Sidebar.init();
+MonthSelector.init();
+MonthSelector.onChange(loadHormiga);
+
+let allHormiga = [];
+let editId = null;
+let catChart = null;
+
+async function loadHormiga(mes, anio) {
+  const res = await Api.get(`/gastos-hormiga?mes=${mes}&anio=${anio}`);
+  if (!res?.success) return;
+  allHormiga = res.data || [];
+  renderTable(allHormiga);
+  updateStats(allHormiga);
+  renderChart(allHormiga);
+}
+
+function updateStats(data) {
+  const total = data.reduce((s, g) => s + parseFloat(g.valor || 0), 0);
+  const diasMes = new Date(MonthSelector.anio, MonthSelector.mes, 0).getDate();
+  document.getElementById('totalMes').textContent = Fmt.currency(total);
+  document.getElementById('totalReg').textContent = data.length;
+  document.getElementById('promDiario').textContent = Fmt.currency(total / diasMes);
+  document.getElementById('potAhorro').textContent = Fmt.currency(total * 0.3);
+
+  const alertaEl = document.getElementById('alertaHormiga');
+  if (total > 200000) {
+    alertaEl.innerHTML = `
+      <div style="background:#FADBD8;border:1px solid #E74C3C;border-radius:10px;padding:14px 18px;margin-bottom:16px;display:flex;align-items:center;gap:12px">
+        <div>
+          <strong>Atención:</strong> Gastaste <strong>${Fmt.currency(total)}</strong> en pequeños gastos este mes.
+          Si reduces un 30%, podrías ahorrar <strong>${Fmt.currency(total * 0.3)}</strong> adicionales.
+        </div>
+      </div>
+    `;
+  } else alertaEl.innerHTML = '';
+}
+
+function renderChart(data) {
+  const cats = {};
+  data.forEach(g => { cats[g.categoria] = (cats[g.categoria] || 0) + parseFloat(g.valor || 0); });
+  const ctx = document.getElementById('catChart').getContext('2d');
+  if (catChart) catChart.destroy();
+  catChart = new Chart(ctx, {
+    type: 'doughnut',
+    data: {
+      labels: Object.keys(cats),
+      datasets: [{ data: Object.values(cats), backgroundColor: ['#E74C3C','#F39C12','#27AE60','#1B4F72','#9B59B6','#1ABC9C'], borderWidth: 0 }]
+    },
+    options: {
+      responsive: true,
+      plugins: {
+        legend: { position: 'bottom', labels: { font: { family: 'Poppins', size: 11 }, padding: 12 } },
+        tooltip: { callbacks: { label: ctx => ` ${Fmt.currency(ctx.raw)}` } }
+      }
+    }
+  });
+}
+
+function renderTable(data) {
+  const tbody = document.getElementById('hormigaBody');
+  if (!data.length) {
+    tbody.innerHTML = `<tr><td colspan="5"><div class="empty-state"><div class="empty-icon"><svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></div><h3>Sin gastos registrados</h3></div></td></tr>`;
+    return;
+  }
+  const catColors = { Comida:'warning', Entretenimiento:'danger', Bebidas:'info', Transporte:'primary', Otro:'success' };
+  tbody.innerHTML = data.map(g => `
+    <tr>
+      <td><strong>${g.nombre}</strong></td>
+      <td><span class="badge-status badge-${catColors[g.categoria] || 'info'}">${g.categoria}</span></td>
+      <td><strong class="text-warning">${Fmt.currency(g.valor)}</strong></td>
+      <td>${Fmt.date(g.fecha)}</td>
+      <td>
+        <div style="display:flex;gap:6px">
+          <button class="btn btn-outline btn-sm" onclick="editItem(${g.id})">Editar</button>
+          <button class="btn btn-danger btn-sm" onclick="deleteItem(${g.id})">Eliminar</button>
+        </div>
+      </td>
+    </tr>
+  `).join('');
+}
+
+function filterTable() {
+  const q = document.getElementById('searchInput').value.toLowerCase();
+  renderTable(allHormiga.filter(g => !q || g.nombre.toLowerCase().includes(q) || g.categoria.toLowerCase().includes(q)));
+}
+
+function openModal(data = null) {
+  editId = data?.id || null;
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay active';
+  overlay.id = 'hormigaModal';
+  overlay.innerHTML = `
+    <div class="modal">
+      <div class="modal-header">
+        <h3 class="modal-title">${editId ? 'Editar Gasto' : 'Nuevo Gasto Menor'}</h3>
+        <button class="modal-close" onclick="document.getElementById('hormigaModal').remove()">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label class="form-label">Nombre *</label>
+          <input type="text" class="form-control" id="fNombre" value="${data?.nombre || ''}" placeholder="Ej: Café, dulces...">
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div class="form-group">
+            <label class="form-label">Categoría *</label>
+            <select class="form-control" id="fCategoria">
+              ${['Comida','Bebidas','Entretenimiento','Transporte','Streaming','Otro'].map(c =>
+                `<option ${data?.categoria === c ? 'selected' : ''}>${c}</option>`).join('')}
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Valor (COP) *</label>
+            <input type="number" class="form-control" id="fValor" value="${data?.valor || ''}" min="0">
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Fecha *</label>
+          <input type="date" class="form-control" id="fFecha" value="${data?.fecha || new Date().toISOString().split('T')[0]}">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Descripción</label>
+          <textarea class="form-control" id="fDesc" rows="2">${data?.descripcion || ''}</textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-outline" onclick="document.getElementById('hormigaModal').remove()">Cancelar</button>
+        <button class="btn btn-warning" onclick="saveItem()">Guardar</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+}
+
+async function saveItem() {
+  const body = {
+    nombre: document.getElementById('fNombre').value.trim(),
+    categoria: document.getElementById('fCategoria').value,
+    valor: parseFloat(document.getElementById('fValor').value),
+    fecha: document.getElementById('fFecha').value,
+    descripcion: document.getElementById('fDesc').value.trim()
+  };
+  if (!body.nombre || !body.valor || !body.fecha) { Toast.show('Completa los campos obligatorios', 'warning'); return; }
+  const res = editId ? await Api.put(`/gastos-hormiga/${editId}`, body) : await Api.post('/gastos-hormiga', body);
+  if (res?.success) {
+    Toast.show('Guardado', 'success');
+    document.getElementById('hormigaModal').remove();
+    loadHormiga(MonthSelector.mes, MonthSelector.anio);
+  } else Toast.show(res?.message || 'Error', 'error');
+}
+
+function editItem(id) { openModal(allHormiga.find(g => g.id === id)); }
+
+function deleteItem(id) {
+  Confirm.show('¿Eliminar este gasto?', async () => {
+    const res = await Api.delete(`/gastos-hormiga/${id}`);
+    if (res?.success) { Toast.show('Eliminado', 'success'); loadHormiga(MonthSelector.mes, MonthSelector.anio); }
+  });
+}
+
+loadHormiga(MonthSelector.mes, MonthSelector.anio);
+</script>
+</body>
+</html>

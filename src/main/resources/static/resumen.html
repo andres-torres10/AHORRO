@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Resumen Mensual - Ingeniería del Ahorro</title>
+  <link rel="stylesheet" href="css/variables.css">
+  <link rel="stylesheet" href="css/main.css">
+</head>
+<body>
+<div id="appLayout" class="app-layout"></div>
+<script src="js/api.js"></script>
+<script src="js/layout.js"></script>
+<script>
+if (!Auth.requireAuth()) throw new Error();
+
+document.getElementById('appLayout').innerHTML = `
+  ${renderLayout('resumen.html')}
+  <div class="main-content">
+    ${renderTopbar('Resumen Mensual', 'Tu situación financiera del mes', true)}
+    <div class="page-content">
+      <div class="page-header">
+        <div><h2>Resumen Financiero</h2><p>Análisis completo de tu mes</p></div>
+        <div style="display:flex;gap:10px">
+          <button class="btn btn-danger" onclick="exportPDF()">Exportar PDF</button>
+          <button class="btn btn-success" onclick="exportExcel()">Exportar Excel</button>
+        </div>
+      </div>
+      <div id="resumenContent">
+        <div style="text-align:center;padding:60px;color:var(--text-muted)">Cargando resumen...</div>
+      </div>
+    </div>
+  </div>
+`;
+
+Sidebar.init();
+MonthSelector.init();
+MonthSelector.onChange(loadResumen);
+
+async function loadResumen(mes, anio) {
+  const res = await Api.get(`/dashboard?mes=${mes}&anio=${anio}`);
+  if (!res?.success) return;
+  const d = res.data;
+
+  const pctAhorro = d.porcentajeAhorro || 0;
+  const semaforoClass = d.semaforo?.toLowerCase() || 'verde';
+
+  document.getElementById('resumenContent').innerHTML = `
+    <div class="stats-grid" style="margin-bottom:24px">
+      <div class="stat-card" style="--card-color:#27AE60;--card-bg:#D5F5E3">
+        <div class="stat-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></div>
+        <div class="stat-label">Total Ingresos</div>
+        <div class="stat-value text-success">${Fmt.currency(d.totalIngresos)}</div>
+      </div>
+      <div class="stat-card" style="--card-color:#E74C3C;--card-bg:#FADBD8">
+        <div class="stat-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg></div>
+        <div class="stat-label">Gastos Fijos</div>
+        <div class="stat-value text-danger">${Fmt.currency(d.totalGastosFijos)}</div>
+      </div>
+      <div class="stat-card" style="--card-color:#F39C12;--card-bg:#FDEBD0">
+        <div class="stat-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></div>
+        <div class="stat-label">Gastos Menores</div>
+        <div class="stat-value text-warning">${Fmt.currency(d.totalGastosHormiga)}</div>
+      </div>
+      <div class="stat-card" style="--card-color:#27AE60;--card-bg:#D5F5E3">
+        <div class="stat-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21V5a2 2 0 0 0-2-2H7a2 2 0 0 0-2 2v16m14 0H5m14 0h2M5 21H3"/></svg></div>
+        <div class="stat-label">Ahorro del Mes</div>
+        <div class="stat-value text-success">${Fmt.currency(d.ahorroDisponible)}</div>
+      </div>
+      <div class="stat-card" style="--card-color:#1B4F72;--card-bg:rgba(27,79,114,0.1)">
+        <div class="stat-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="19" y1="5" x2="5" y2="19"/><circle cx="6.5" cy="6.5" r="2.5"/><circle cx="17.5" cy="17.5" r="2.5"/></svg></div>
+        <div class="stat-label">% Ahorrado</div>
+        <div class="stat-value text-primary">${Fmt.percent(pctAhorro)}</div>
+      </div>
+      <div class="stat-card" style="--card-color:${d.balanceNeto >= 0 ? '#27AE60' : '#E74C3C'};--card-bg:${d.balanceNeto >= 0 ? '#D5F5E3' : '#FADBD8'}">
+        <div class="stat-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="20" x2="12" y2="4"/><path d="M6 12l6-8 6 8"/><path d="M4 20h16"/></svg></div>
+        <div class="stat-label">Balance Neto</div>
+        <div class="stat-value" style="color:${d.balanceNeto >= 0 ? 'var(--success)' : 'var(--danger)'}">${Fmt.currency(d.balanceNeto)}</div>
+      </div>
+    </div>
+
+    <div class="grid-2" style="margin-bottom:24px">
+      <div class="card">
+        <div class="card-header"><span class="card-title">Salud Financiera</span></div>
+        <div class="card-body">
+          <div class="semaforo ${semaforoClass}" style="margin-bottom:16px">
+            <div class="semaforo-dot"></div>
+            <div>
+              <strong>${d.semaforo === 'VERDE' ? 'Finanzas Saludables' : d.semaforo === 'AMARILLO' ? 'Finanzas Ajustadas' : 'Peligro Financiero'}</strong>
+              <div style="font-size:0.82rem;margin-top:2px">${d.mensajeSemaforo}</div>
+            </div>
+          </div>
+          <div style="margin-bottom:8px">
+            <div style="display:flex;justify-content:space-between;font-size:0.8rem;margin-bottom:4px">
+              <span>Nivel de gasto</span><span>${Fmt.percent(d.porcentajeGastado)}</span>
+            </div>
+            <div class="progress-bar-container">
+              <div class="progress-bar ${semaforoClass === 'verde' ? 'success' : semaforoClass === 'amarillo' ? 'warning' : 'danger'}"
+                   style="width:${Math.min(100, d.porcentajeGastado)}%"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header"><span class="card-title">Análisis Inteligente</span></div>
+        <div class="card-body">
+          ${(d.consejos || []).map(c => `
+            <div style="display:flex;gap:10px;padding:10px;background:var(--gray-light);border-radius:8px;margin-bottom:8px;font-size:0.85rem">
+              ${c}
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    </div>
+
+    ${d.metas?.length > 0 ? `
+    <div class="card">
+      <div class="card-header"><span class="card-title">Progreso de Metas</span></div>
+      <div class="card-body">
+        ${d.metas.map(m => `
+          <div style="margin-bottom:16px">
+            <div style="display:flex;justify-content:space-between;margin-bottom:6px">
+              <span style="font-weight:600">${m.icono} ${m.nombre}</span>
+              <span style="font-size:0.8rem;color:var(--text-muted)">${Fmt.currency(m.valorAhorrado)} / ${Fmt.currency(m.valorMeta)}</span>
+            </div>
+            <div class="progress-bar-container">
+              <div class="progress-bar success" style="width:${m.porcentaje}%;background:${m.color}"></div>
+            </div>
+            <div style="text-align:right;font-size:0.75rem;color:var(--text-muted);margin-top:3px">${Fmt.percent(m.porcentaje)}</div>
+          </div>
+        `).join('')}
+      </div>
+    </div>
+    ` : ''}
+  `;
+}
+
+async function exportPDF() {
+  Toast.show('Generando PDF...', 'info');
+  const res = await Api.download(`/reportes/pdf?mes=${MonthSelector.mes}&anio=${MonthSelector.anio}`);
+  if (res.ok) {
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = `reporte_${MonthSelector.mes}_${MonthSelector.anio}.pdf`;
+    a.click(); URL.revokeObjectURL(url);
+    Toast.show('PDF descargado', 'success');
+  } else Toast.show('Error al generar PDF', 'error');
+}
+
+async function exportExcel() {
+  Toast.show('Generando Excel...', 'info');
+  const res = await Api.download(`/reportes/excel?mes=${MonthSelector.mes}&anio=${MonthSelector.anio}`);
+  if (res.ok) {
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = `reporte_${MonthSelector.mes}_${MonthSelector.anio}.xlsx`;
+    a.click(); URL.revokeObjectURL(url);
+    Toast.show('Excel descargado', 'success');
+  } else Toast.show('Error al generar Excel', 'error');
+}
+
+loadResumen(MonthSelector.mes, MonthSelector.anio);
+</script>
+</body>
+</html>

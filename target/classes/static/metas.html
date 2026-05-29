@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Metas de Ahorro - Ingeniería del Ahorro</title>
+  <link rel="stylesheet" href="css/variables.css">
+  <link rel="stylesheet" href="css/main.css">
+</head>
+<body>
+<div id="appLayout" class="app-layout"></div>
+<script src="js/api.js"></script>
+<script src="js/layout.js"></script>
+<script>
+if (!Auth.requireAuth()) throw new Error();
+
+document.getElementById('appLayout').innerHTML = `
+  ${renderLayout('metas.html')}
+  <div class="main-content">
+    ${renderTopbar('Metas de Ahorro', 'Sueña grande, ahorra inteligente')}
+    <div class="page-content">
+      <div class="page-header">
+        <div><h2>Mis Metas de Ahorro</h2><p>Define y alcanza tus objetivos financieros</p></div>
+        <button class="btn btn-success" onclick="openModal()">+ Nueva Meta</button>
+      </div>
+      <div id="metasGrid" class="grid-3"></div>
+    </div>
+  </div>
+`;
+
+Sidebar.init();
+
+let allMetas = [];
+let editId = null;
+
+async function loadMetas() {
+  const res = await Api.get('/metas');
+  if (!res?.success) return;
+  allMetas = res.data || [];
+  renderMetas(allMetas);
+}
+
+function renderMetas(data) {
+  const grid = document.getElementById('metasGrid');
+  if (!data.length) {
+    grid.innerHTML = `<div style="grid-column:1/-1"><div class="empty-state card card-body"><div class="empty-icon">🎯</div><h3>Sin metas de ahorro</h3><p>Crea tu primera meta y empieza a ahorrar</p></div></div>`;
+    return;
+  }
+  grid.innerHTML = data.map(m => {
+    const pct = m.valorMeta > 0 ? Math.min(100, (parseFloat(m.valorAhorrado || 0) / parseFloat(m.valorMeta)) * 100) : 0;
+    const faltante = parseFloat(m.valorMeta) - parseFloat(m.valorAhorrado || 0);
+    const diasRestantes = m.fechaObjetivo ? Math.ceil((new Date(m.fechaObjetivo) - new Date()) / (1000*60*60*24)) : null;
+    return `
+      <div class="card" style="border-top:4px solid ${m.color || '#27AE60'}">
+        <div class="card-body">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px">
+            <div>
+              <div style="font-size:2rem;margin-bottom:4px">${m.icono || '🎯'}</div>
+              <h3 style="font-size:1rem;font-weight:700">${m.nombre}</h3>
+              <span class="badge-status badge-${m.estado === 'Completada' ? 'success' : m.estado === 'Cancelada' ? 'danger' : 'primary'}">${m.estado}</span>
+            </div>
+            <div style="display:flex;gap:6px">
+              <button class="btn btn-outline btn-sm" onclick="editMeta(${m.id})">Editar</button>
+              <button class="btn btn-danger btn-sm" onclick="deleteMeta(${m.id})">Eliminar</button>
+            </div>
+          </div>
+
+          <div style="text-align:center;margin-bottom:16px">
+            <div style="font-size:2rem;font-weight:800;color:${m.color || '#27AE60'}">${pct.toFixed(0)}%</div>
+            <div style="font-size:0.8rem;color:var(--text-muted)">alcanzado</div>
+          </div>
+
+          <div class="progress-bar-container" style="height:12px;margin-bottom:12px">
+            <div class="progress-bar" style="width:${pct}%;background:${m.color || '#27AE60'};height:12px"></div>
+          </div>
+
+          <div style="display:flex;justify-content:space-between;font-size:0.82rem;margin-bottom:12px">
+            <div>
+              <div style="color:var(--text-muted)">Ahorrado</div>
+              <div style="font-weight:700;color:var(--success)">${Fmt.currency(m.valorAhorrado || 0)}</div>
+            </div>
+            <div style="text-align:right">
+              <div style="color:var(--text-muted)">Meta</div>
+              <div style="font-weight:700">${Fmt.currency(m.valorMeta)}</div>
+            </div>
+          </div>
+
+          ${faltante > 0 ? `<div style="background:var(--gray-light);padding:8px 12px;border-radius:8px;font-size:0.78rem;margin-bottom:10px">
+            Faltan <strong>${Fmt.currency(faltante)}</strong> para alcanzar tu meta
+          </div>` : ''}
+
+          ${diasRestantes !== null ? `<div style="font-size:0.78rem;color:var(--text-muted)">
+            ${diasRestantes > 0 ? `${diasRestantes} días restantes` : diasRestantes === 0 ? '¡Hoy es el día!' : `Venció hace ${Math.abs(diasRestantes)} días`}
+          </div>` : ''}
+
+          <button class="btn btn-outline btn-sm" style="width:100%;margin-top:12px" onclick="abonarMeta(${m.id})">
+            Abonar a esta meta
+          </button>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function openModal(data = null) {
+  editId = data?.id || null;
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay active';
+  overlay.id = 'metaModal';
+  overlay.innerHTML = `
+    <div class="modal">
+      <div class="modal-header">
+        <h3 class="modal-title">${editId ? 'Editar Meta' : 'Nueva Meta de Ahorro'}</h3>
+        <button class="modal-close" onclick="document.getElementById('metaModal').remove()">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label class="form-label">Nombre de la meta *</label>
+          <input type="text" class="form-control" id="fNombre" value="${data?.nombre || ''}" placeholder="Ej: Laptop, Viaje, Moto...">
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div class="form-group">
+            <label class="form-label">Valor Meta (COP) *</label>
+            <input type="number" class="form-control" id="fValorMeta" value="${data?.valorMeta || ''}" min="0">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Ya ahorrado (COP)</label>
+            <input type="number" class="form-control" id="fValorAhorrado" value="${data?.valorAhorrado || 0}" min="0">
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div class="form-group">
+            <label class="form-label">Fecha Objetivo</label>
+            <input type="date" class="form-control" id="fFecha" value="${data?.fechaObjetivo || ''}">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Estado</label>
+            <select class="form-control" id="fEstado">
+              ${['En progreso','Completada','Cancelada'].map(e => `<option ${data?.estado === e ? 'selected' : ''}>${e}</option>`).join('')}
+            </select>
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div class="form-group">
+            <label class="form-label">Ícono</label>
+            <input type="text" class="form-control" id="fIcono" value="${data?.icono || '🎯'}" placeholder="Emoji">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Color</label>
+            <input type="color" class="form-control" id="fColor" value="${data?.color || '#27AE60'}" style="height:40px;cursor:pointer">
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Descripción</label>
+          <textarea class="form-control" id="fDesc" rows="2">${data?.descripcion || ''}</textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-outline" onclick="document.getElementById('metaModal').remove()">Cancelar</button>
+        <button class="btn btn-success" onclick="saveMeta()">Guardar</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+}
+
+async function saveMeta() {
+  const body = {
+    nombre: document.getElementById('fNombre').value.trim(),
+    valorMeta: parseFloat(document.getElementById('fValorMeta').value),
+    valorAhorrado: parseFloat(document.getElementById('fValorAhorrado').value) || 0,
+    fechaObjetivo: document.getElementById('fFecha').value || null,
+    estado: document.getElementById('fEstado').value,
+    icono: document.getElementById('fIcono').value || '🎯',
+    color: document.getElementById('fColor').value,
+    descripcion: document.getElementById('fDesc').value.trim()
+  };
+  if (!body.nombre || !body.valorMeta) { Toast.show('Completa los campos obligatorios', 'warning'); return; }
+  const res = editId ? await Api.put(`/metas/${editId}`, body) : await Api.post('/metas', body);
+  if (res?.success) {
+    Toast.show('Meta guardada', 'success');
+    document.getElementById('metaModal').remove();
+    loadMetas();
+  } else Toast.show(res?.message || 'Error', 'error');
+}
+
+function editMeta(id) { openModal(allMetas.find(m => m.id === id)); }
+
+function abonarMeta(id) {
+  const meta = allMetas.find(m => m.id === id);
+  if (!meta) return;
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay active';
+  overlay.id = 'abonoModal';
+  overlay.innerHTML = `
+    <div class="modal" style="max-width:360px">
+      <div class="modal-header">
+        <h3 class="modal-title">Abonar a "${meta.nombre}"</h3>
+        <button class="modal-close" onclick="document.getElementById('abonoModal').remove()">✕</button>
+      </div>
+      <div class="modal-body">
+        <p style="color:var(--text-muted);font-size:0.85rem;margin-bottom:12px">
+          Actual: ${Fmt.currency(meta.valorAhorrado)} / ${Fmt.currency(meta.valorMeta)}
+        </p>
+        <div class="form-group">
+          <label class="form-label">Monto a abonar (COP)</label>
+          <input type="number" class="form-control" id="fAbono" placeholder="0" min="0">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-outline" onclick="document.getElementById('abonoModal').remove()">Cancelar</button>
+        <button class="btn btn-success" onclick="confirmarAbono(${id})">Abonar</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+}
+
+async function confirmarAbono(id) {
+  const meta = allMetas.find(m => m.id === id);
+  const abono = parseFloat(document.getElementById('fAbono').value);
+  if (!abono || abono <= 0) { Toast.show('Ingresa un monto válido', 'warning'); return; }
+  meta.valorAhorrado = parseFloat(meta.valorAhorrado || 0) + abono;
+  if (meta.valorAhorrado >= meta.valorMeta) meta.estado = 'Completada';
+  const res = await Api.put(`/metas/${id}`, meta);
+  if (res?.success) {
+    Toast.show('Abono registrado', 'success');
+    document.getElementById('abonoModal').remove();
+    loadMetas();
+  }
+}
+
+function deleteMeta(id) {
+  Confirm.show('¿Eliminar esta meta?', async () => {
+    const res = await Api.delete(`/metas/${id}`);
+    if (res?.success) { Toast.show('Eliminada', 'success'); loadMetas(); }
+  });
+}
+
+loadMetas();
+</script>
+</body>
+</html>

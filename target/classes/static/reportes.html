@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Reportes - Ingeniería del Ahorro</title>
+  <link rel="stylesheet" href="css/variables.css">
+  <link rel="stylesheet" href="css/main.css">
+</head>
+<body>
+<div id="appLayout" class="app-layout"></div>
+<script src="js/api.js"></script>
+<script src="js/layout.js"></script>
+<script>
+if (!Auth.requireAuth()) throw new Error();
+
+document.getElementById('appLayout').innerHTML = `
+  ${renderLayout('reportes.html')}
+  <div class="main-content">
+    ${renderTopbar('Reportes', 'Descarga tus reportes financieros')}
+    <div class="page-content">
+      <div class="page-header">
+        <div><h2>Generador de Reportes</h2><p>Exporta tus datos en PDF o Excel</p></div>
+      </div>
+
+      <div class="grid-2">
+        <div class="card">
+          <div class="card-body" style="text-align:center;padding:40px">
+            <div style="margin-bottom:16px">
+              <svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="#E74C3C" stroke-width="1.5">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                <polyline points="14 2 14 8 20 8"/>
+                <line x1="16" y1="13" x2="8" y2="13"/>
+                <line x1="16" y1="17" x2="8" y2="17"/>
+                <polyline points="10 9 9 9 8 9"/>
+              </svg>
+            </div>
+            <h3 style="font-size:1.2rem;font-weight:700;margin-bottom:8px">Reporte PDF</h3>
+            <p style="color:var(--text-muted);font-size:0.875rem;margin-bottom:24px">
+              Genera un reporte completo en PDF con ingresos, gastos y análisis financiero.
+            </p>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:20px">
+              <div class="form-group">
+                <label class="form-label">Mes</label>
+                <select class="form-control" id="pdfMes">
+                  ${Array.from({length:12},(_,i)=>`<option value="${i+1}" ${i+1===new Date().getMonth()+1?'selected':''}>${Fmt.monthName(i+1)}</option>`).join('')}
+                </select>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Año</label>
+                <select class="form-control" id="pdfAnio">
+                  ${[new Date().getFullYear()-1,new Date().getFullYear()].map(y=>`<option ${y===new Date().getFullYear()?'selected':''}>${y}</option>`).join('')}
+                </select>
+              </div>
+            </div>
+            <button class="btn btn-danger btn-lg" style="width:100%" onclick="downloadPDF()">
+              Descargar PDF
+            </button>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-body" style="text-align:center;padding:40px">
+            <div style="margin-bottom:16px">
+              <svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="#27AE60" stroke-width="1.5">
+                <line x1="18" y1="20" x2="18" y2="10"/>
+                <line x1="12" y1="20" x2="12" y2="4"/>
+                <line x1="6" y1="20" x2="6" y2="14"/>
+              </svg>
+            </div>
+            <h3 style="font-size:1.2rem;font-weight:700;margin-bottom:8px">Reporte Excel</h3>
+            <p style="color:var(--text-muted);font-size:0.875rem;margin-bottom:24px">
+              Exporta todos tus datos en formato Excel con hojas separadas por categoría.
+            </p>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:20px">
+              <div class="form-group">
+                <label class="form-label">Mes</label>
+                <select class="form-control" id="xlsMes">
+                  ${Array.from({length:12},(_,i)=>`<option value="${i+1}" ${i+1===new Date().getMonth()+1?'selected':''}>${Fmt.monthName(i+1)}</option>`).join('')}
+                </select>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Año</label>
+                <select class="form-control" id="xlsAnio">
+                  ${[new Date().getFullYear()-1,new Date().getFullYear()].map(y=>`<option ${y===new Date().getFullYear()?'selected':''}>${y}</option>`).join('')}
+                </select>
+              </div>
+            </div>
+            <button class="btn btn-success btn-lg" style="width:100%" onclick="downloadExcel()">
+              Descargar Excel
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div class="card" style="margin-top:24px">
+        <div class="card-body">
+          <h3 style="font-size:1rem;font-weight:700;margin-bottom:12px">¿Qué incluyen los reportes?</h3>
+          <div class="grid-3">
+            <div style="padding:12px;background:var(--gray-light);border-radius:8px">
+              <div style="margin-bottom:6px"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></div>
+              <div style="font-weight:600;font-size:0.875rem">Ingresos</div>
+              <div style="font-size:0.78rem;color:var(--text-muted)">Todos los ingresos del período seleccionado</div>
+            </div>
+            <div style="padding:12px;background:var(--gray-light);border-radius:8px">
+              <div style="margin-bottom:6px"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></div>
+              <div style="font-weight:600;font-size:0.875rem">Gastos Fijos</div>
+              <div style="font-size:0.78rem;color:var(--text-muted)">Gastos recurrentes con estado y prioridad</div>
+            </div>
+            <div style="padding:12px;background:var(--gray-light);border-radius:8px">
+              <div style="margin-bottom:6px"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></div>
+              <div style="font-weight:600;font-size:0.875rem">Gastos Menores</div>
+              <div style="font-size:0.78rem;color:var(--text-muted)">Pequeños gastos categorizados</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+`;
+
+Sidebar.init();
+
+async function downloadPDF() {
+  const mes = document.getElementById('pdfMes').value;
+  const anio = document.getElementById('pdfAnio').value;
+  Toast.show('Generando PDF...', 'info');
+  const res = await Api.download(`/reportes/pdf?mes=${mes}&anio=${anio}`);
+  if (res.ok) {
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = `reporte_${mes}_${anio}.pdf`;
+    a.click(); URL.revokeObjectURL(url);
+    Toast.show('PDF descargado exitosamente', 'success');
+  } else Toast.show('Error al generar el PDF', 'error');
+}
+
+async function downloadExcel() {
+  const mes = document.getElementById('xlsMes').value;
+  const anio = document.getElementById('xlsAnio').value;
+  Toast.show('Generando Excel...', 'info');
+  const res = await Api.download(`/reportes/excel?mes=${mes}&anio=${anio}`);
+  if (res.ok) {
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = `reporte_${mes}_${anio}.xlsx`;
+    a.click(); URL.revokeObjectURL(url);
+    Toast.show('Excel descargado exitosamente', 'success');
+  } else Toast.show('Error al generar el Excel', 'error');
+}
+</script>
+</body>
+</html>

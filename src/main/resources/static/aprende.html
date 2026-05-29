@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Aprende Finanzas - Ingeniería del Ahorro</title>
+  <link rel="stylesheet" href="css/variables.css">
+  <link rel="stylesheet" href="css/main.css">
+</head>
+<body>
+<div id="appLayout" class="app-layout"></div>
+<script src="js/api.js"></script>
+<script src="js/layout.js"></script>
+<script>
+if (!Auth.requireAuth()) throw new Error();
+
+const articulos = [
+  { id:1, titulo:'¿Qué son los gastos hormiga?', categoria:'Gastos', icono:'🐜', tiempo:'3 min', color:'#F39C12',
+    resumen:'Los gastos hormiga son pequeños desembolsos diarios que parecen insignificantes pero que sumados al mes pueden representar una cantidad considerable de dinero.',
+    contenido:`<h3>¿Qué son los gastos hormiga?</h3>
+    <p>Los gastos hormiga son pequeños gastos cotidianos que realizamos casi sin darnos cuenta: un café, un dulce, una suscripción olvidada, el transporte extra...</p>
+    <h4>Ejemplos comunes:</h4>
+    <ul><li>☕ Café diario: $3.000 × 22 días = $66.000/mes</li><li>🍫 Dulces y snacks: $2.000 × 30 = $60.000/mes</li><li>📱 Suscripciones sin usar: $30.000/mes</li><li>🚕 Taxis innecesarios: $50.000/mes</li></ul>
+    <h4>¿Cómo controlarlos?</h4>
+    <p>1. Registra TODOS tus gastos, por pequeños que sean.<br>2. Revisa semanalmente tus gastos hormiga.<br>3. Establece un presupuesto máximo para gastos pequeños.<br>4. Pregúntate: ¿realmente lo necesito?</p>` },
+  { id:2, titulo:'Cómo crear un presupuesto inteligente', categoria:'Presupuesto', icono:'📊', tiempo:'5 min', color:'#1B4F72',
+    resumen:'El método 50/30/20 es una de las estrategias más efectivas para organizar tus finanzas personales de manera simple y sostenible.',
+    contenido:`<h3>El método 50/30/20</h3>
+    <p>Divide tus ingresos en tres categorías:</p>
+    <ul><li><strong>50% Necesidades:</strong> Arriendo, comida, transporte, servicios</li><li><strong>30% Deseos:</strong> Entretenimiento, ropa, salidas</li><li><strong>20% Ahorro:</strong> Fondo de emergencia, metas, inversiones</li></ul>
+    <h4>Ejemplo práctico:</h4>
+    <p>Si ganas $3.000.000/mes:<br>• Necesidades: $1.500.000<br>• Deseos: $900.000<br>• Ahorro: $600.000</p>
+    <h4>Consejos:</h4>
+    <p>• Automatiza el ahorro: transfiere el 20% apenas recibas tu salario.<br>• Revisa y ajusta mensualmente.<br>• Sé flexible pero disciplinado.</p>` },
+  { id:3, titulo:'Cómo salir de las deudas', categoria:'Deudas', icono:'💳', tiempo:'6 min', color:'#E74C3C',
+    resumen:'Existen dos estrategias probadas para eliminar deudas: la bola de nieve y la avalancha. Conoce cuál es mejor para ti.',
+    contenido:`<h3>Estrategias para eliminar deudas</h3>
+    <h4>🏔️ Método Avalancha</h4>
+    <p>Paga primero la deuda con mayor tasa de interés. Matemáticamente es la más eficiente y te ahorra más dinero a largo plazo.</p>
+    <h4>⛄ Método Bola de Nieve</h4>
+    <p>Paga primero la deuda más pequeña. Genera motivación psicológica al ver deudas eliminadas rápidamente.</p>
+    <h4>Pasos para salir de deudas:</h4>
+    <ol><li>Lista todas tus deudas con montos e intereses</li><li>Elige tu método (avalancha o bola de nieve)</li><li>Paga mínimos en todas y el extra en la prioritaria</li><li>No adquieras nuevas deudas mientras pagas</li><li>Celebra cada deuda eliminada</li></ol>` },
+  { id:4, titulo:'Inversiones básicas para principiantes', categoria:'Inversión', icono:'📈', tiempo:'7 min', color:'#27AE60',
+    resumen:'Antes de invertir necesitas un fondo de emergencia. Luego puedes explorar CDTs, fondos de inversión y acciones.',
+    contenido:`<h3>Primeros pasos en inversiones</h3>
+    <h4>Antes de invertir:</h4>
+    <ul><li>✅ Tener fondo de emergencia (3-6 meses de gastos)</li><li>✅ Eliminar deudas de alto interés</li><li>✅ Tener presupuesto estable</li></ul>
+    <h4>Opciones para principiantes en Colombia:</h4>
+    <ul><li><strong>CDT:</strong> Certificado de Depósito a Término. Seguro, rentabilidad fija.</li><li><strong>Fondos de inversión:</strong> Diversificación automática, bajo riesgo.</li><li><strong>Acciones:</strong> Mayor riesgo, mayor potencial de ganancia.</li><li><strong>Finca raíz:</strong> Inversión tangible, requiere más capital.</li></ul>
+    <h4>Regla de oro:</h4>
+    <p>Nunca inviertas dinero que no puedas permitirte perder. Diversifica siempre.</p>` },
+  { id:5, titulo:'Fondo de emergencia: por qué y cómo', categoria:'Ahorro', icono:'🏦', tiempo:'4 min', color:'#9B59B6',
+    resumen:'Un fondo de emergencia es tu red de seguridad financiera. Debe cubrir entre 3 y 6 meses de tus gastos básicos.',
+    contenido:`<h3>¿Por qué necesitas un fondo de emergencia?</h3>
+    <p>La vida es impredecible. Un fondo de emergencia te protege ante: pérdida de empleo, gastos médicos inesperados, reparaciones del hogar o vehículo.</p>
+    <h4>¿Cuánto necesitas?</h4>
+    <p>Entre 3 y 6 meses de tus gastos básicos mensuales.</p>
+    <h4>¿Dónde guardarlo?</h4>
+    <ul><li>Cuenta de ahorros de fácil acceso</li><li>CDT a corto plazo</li><li>Fondo de liquidez</li></ul>
+    <h4>Cómo construirlo:</h4>
+    <ol><li>Define tu meta (ej: $3.000.000)</li><li>Ahorra un monto fijo mensual</li><li>Úsalo SOLO para emergencias reales</li><li>Repón lo que uses</li></ol>` },
+  { id:6, titulo:'Hábitos financieros que cambian tu vida', categoria:'Hábitos', icono:'🌟', tiempo:'4 min', color:'#1ABC9C',
+    resumen:'Los millonarios no son ricos por suerte. Tienen hábitos financieros consistentes que cualquiera puede adoptar.',
+    contenido:`<h3>10 hábitos financieros poderosos</h3>
+    <ol>
+      <li><strong>Paga primero a ti mismo:</strong> Ahorra antes de gastar.</li>
+      <li><strong>Registra cada gasto:</strong> Lo que no se mide no se controla.</li>
+      <li><strong>Vive por debajo de tus posibilidades:</strong> Gasta menos de lo que ganas.</li>
+      <li><strong>Edúcate financieramente:</strong> Lee, aprende, aplica.</li>
+      <li><strong>Evita las deudas de consumo:</strong> No financies lo que se deprecia.</li>
+      <li><strong>Diversifica ingresos:</strong> No dependas de una sola fuente.</li>
+      <li><strong>Invierte regularmente:</strong> Aunque sea poco, hazlo constante.</li>
+      <li><strong>Revisa tus finanzas mensualmente:</strong> Ajusta según resultados.</li>
+      <li><strong>Ten metas claras:</strong> El dinero sin propósito se gasta.</li>
+      <li><strong>Sé paciente:</strong> La riqueza se construye con tiempo.</li>
+    </ol>` }
+];
+
+document.getElementById('appLayout').innerHTML = `
+  ${renderLayout('aprende.html')}
+  <div class="main-content">
+    ${renderTopbar('Aprende Finanzas', 'Educación financiera para tu futuro')}
+    <div class="page-content">
+      <div class="page-header">
+        <div><h2>Centro de Aprendizaje</h2><p>Mejora tu educación financiera con contenido práctico</p></div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap" id="filtros">
+          <button class="btn btn-primary btn-sm" onclick="filtrar('')">Todos</button>
+          ${[...new Set(articulos.map(a=>a.categoria))].map(c =>
+            `<button class="btn btn-outline btn-sm" onclick="filtrar('${c}')">${c}</button>`).join('')}
+        </div>
+      </div>
+
+      <div class="grid-3" id="articulosGrid">
+        ${articulos.map(a => `
+          <div class="card" style="cursor:pointer;border-top:3px solid ${a.color}" onclick="verArticulo(${a.id})">
+            <div class="card-body">
+              <div style="font-size:2.5rem;margin-bottom:12px">${a.icono}</div>
+              <span class="badge-status badge-primary" style="margin-bottom:8px">${a.categoria}</span>
+              <h3 style="font-size:0.95rem;font-weight:700;margin-bottom:8px;line-height:1.4">${a.titulo}</h3>
+              <p style="font-size:0.82rem;color:var(--text-muted);line-height:1.5;margin-bottom:12px">${a.resumen}</p>
+              <div style="display:flex;justify-content:space-between;align-items:center">
+                <span style="font-size:0.75rem;color:var(--text-muted)">${a.tiempo} de lectura</span>
+                <span style="color:${a.color};font-size:0.82rem;font-weight:600">Leer →</span>
+              </div>
+            </div>
+          </div>
+        `).join('')}
+      </div>
+    </div>
+  </div>
+`;
+
+Sidebar.init();
+
+function filtrar(cat) {
+  const filtered = cat ? articulos.filter(a => a.categoria === cat) : articulos;
+  document.getElementById('articulosGrid').innerHTML = filtered.map(a => `
+    <div class="card" style="cursor:pointer;border-top:3px solid ${a.color}" onclick="verArticulo(${a.id})">
+      <div class="card-body">
+        <div style="font-size:2.5rem;margin-bottom:12px">${a.icono}</div>
+        <span class="badge-status badge-primary" style="margin-bottom:8px">${a.categoria}</span>
+        <h3 style="font-size:0.95rem;font-weight:700;margin-bottom:8px;line-height:1.4">${a.titulo}</h3>
+        <p style="font-size:0.82rem;color:var(--text-muted);line-height:1.5;margin-bottom:12px">${a.resumen}</p>
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <span style="font-size:0.75rem;color:var(--text-muted)">${a.tiempo} de lectura</span>
+          <span style="color:${a.color};font-size:0.82rem;font-weight:600">Leer →</span>
+        </div>
+      </div>
+    </div>
+  `).join('');
+}
+
+function verArticulo(id) {
+  const a = articulos.find(x => x.id === id);
+  if (!a) return;
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay active';
+  overlay.innerHTML = `
+    <div class="modal" style="max-width:640px">
+      <div class="modal-header">
+        <h3 class="modal-title">${a.icono} ${a.titulo}</h3>
+        <button class="modal-close" onclick="this.closest('.modal-overlay').remove()">✕</button>
+      </div>
+      <div class="modal-body" style="line-height:1.8;font-size:0.9rem">
+        <div style="display:flex;gap:8px;margin-bottom:16px">
+          <span class="badge-status badge-primary">${a.categoria}</span>
+          <span style="font-size:0.78rem;color:var(--text-muted)">${a.tiempo} de lectura</span>
+        </div>
+        ${a.contenido}
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-primary" onclick="this.closest('.modal-overlay').remove()">Cerrar</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+}
+</script>
+</body>
+</html>

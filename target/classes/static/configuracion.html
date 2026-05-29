@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Configuración - Ingeniería del Ahorro</title>
+  <link rel="stylesheet" href="css/variables.css">
+  <link rel="stylesheet" href="css/main.css">
+</head>
+<body>
+<div id="appLayout" class="app-layout"></div>
+<script src="js/api.js"></script>
+<script src="js/layout.js"></script>
+<script>
+if (!Auth.requireAuth()) throw new Error();
+
+document.getElementById('appLayout').innerHTML = `
+  ${renderLayout('configuracion.html')}
+  <div class="main-content">
+    ${renderTopbar('Configuración', 'Personaliza tu experiencia')}
+    <div class="page-content">
+      <div class="page-header">
+        <div><h2>Configuración</h2><p>Ajusta la aplicación a tus preferencias</p></div>
+      </div>
+
+      <div class="grid-2">
+        <div class="card">
+          <div class="card-header"><span class="card-title">Apariencia</span></div>
+          <div class="card-body">
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:14px 0;border-bottom:1px solid var(--border)">
+              <div>
+                <div style="font-weight:600;font-size:0.9rem">Modo Oscuro</div>
+                <div style="font-size:0.78rem;color:var(--text-muted)">Cambia entre tema claro y oscuro</div>
+              </div>
+              <label class="toggle-switch">
+                <input type="checkbox" id="darkModeToggle" onchange="toggleDarkMode(this)">
+                <span class="toggle-slider"></span>
+              </label>
+            </div>
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:14px 0">
+              <div>
+                <div style="font-weight:600;font-size:0.9rem">Idioma</div>
+                <div style="font-size:0.78rem;color:var(--text-muted)">Idioma de la interfaz</div>
+              </div>
+              <select class="form-control" style="width:130px">
+                <option>Español</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header"><span class="card-title">Notificaciones</span></div>
+          <div class="card-body">
+            ${[
+              ['Alertas de vencimiento', 'Recibe alertas cuando un gasto fijo vence'],
+              ['Alertas de presupuesto', 'Aviso cuando superas el 80% del presupuesto'],
+              ['Resumen semanal', 'Resumen de tus finanzas cada semana'],
+              ['Consejos financieros', 'Tips personalizados según tus datos']
+            ].map(([titulo, desc], i) => `
+              <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 0;${i < 3 ? 'border-bottom:1px solid var(--border)' : ''}">
+                <div>
+                  <div style="font-weight:600;font-size:0.875rem">${titulo}</div>
+                  <div style="font-size:0.75rem;color:var(--text-muted)">${desc}</div>
+                </div>
+                <label class="toggle-switch">
+                  <input type="checkbox" checked>
+                  <span class="toggle-slider"></span>
+                </label>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header"><span class="card-title">Datos y Privacidad</span></div>
+          <div class="card-body">
+            <div style="margin-bottom:16px">
+              <div style="font-weight:600;font-size:0.9rem;margin-bottom:4px">Exportar todos mis datos</div>
+              <div style="font-size:0.78rem;color:var(--text-muted);margin-bottom:10px">Descarga un respaldo completo de tu información</div>
+              <button class="btn btn-outline btn-sm" onclick="exportarTodo()">Exportar datos</button>
+            </div>
+            <div style="border-top:1px solid var(--border);padding-top:16px">
+              <div style="font-weight:600;font-size:0.9rem;margin-bottom:4px;color:var(--danger)">Cerrar sesión</div>
+              <div style="font-size:0.78rem;color:var(--text-muted);margin-bottom:10px">Cierra tu sesión en este dispositivo</div>
+              <button class="btn btn-danger btn-sm" onclick="Auth.logout()">Cerrar sesión</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header"><span class="card-title">Acerca de</span></div>
+          <div class="card-body" style="text-align:center;padding:30px">
+            <div style="margin-bottom:12px">
+              <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--primary)" stroke-width="1.5">
+                <line x1="12" y1="1" x2="12" y2="23"/>
+                <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+              </svg>
+            </div>
+            <h3 style="font-size:1.2rem;font-weight:700;margin-bottom:4px">Ingeniería del Ahorro</h3>
+            <p style="color:var(--text-muted);font-size:0.85rem;margin-bottom:16px">Sistema de Administración Financiera Personal</p>
+            <div style="background:var(--gray-light);padding:12px;border-radius:8px;font-size:0.8rem;color:var(--text-muted)">
+              <div>Versión 1.0.0</div>
+              <div>Spring Boot + MySQL + HTML/CSS/JS</div>
+              <div style="margin-top:8px">Desarrollado para tus finanzas</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+`;
+
+Sidebar.init();
+
+const style = document.createElement('style');
+style.textContent = `
+  .toggle-switch { position:relative;display:inline-block;width:46px;height:24px; }
+  .toggle-switch input { opacity:0;width:0;height:0; }
+  .toggle-slider { position:absolute;cursor:pointer;inset:0;background:#ccc;border-radius:24px;transition:.3s; }
+  .toggle-slider:before { content:'';position:absolute;height:18px;width:18px;left:3px;bottom:3px;background:white;border-radius:50%;transition:.3s; }
+  input:checked + .toggle-slider { background:var(--primary); }
+  input:checked + .toggle-slider:before { transform:translateX(22px); }
+`;
+document.head.appendChild(style);
+
+const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+document.getElementById('darkModeToggle').checked = isDark;
+
+function toggleDarkMode(el) {
+  if (el.checked) {
+    document.documentElement.setAttribute('data-theme', 'dark');
+    localStorage.setItem('darkMode', 'true');
+  } else {
+    document.documentElement.removeAttribute('data-theme');
+    localStorage.setItem('darkMode', 'false');
+  }
+}
+
+async function exportarTodo() {
+  const mes = new Date().getMonth() + 1;
+  const anio = new Date().getFullYear();
+  Toast.show('Generando exportación...', 'info');
+  const res = await Api.download(`/reportes/excel?mes=${mes}&anio=${anio}`);
+  if (res.ok) {
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = `mis_datos_${anio}.xlsx`;
+    a.click(); URL.revokeObjectURL(url);
+    Toast.show('Datos exportados', 'success');
+  }
+}
+</script>
+</body>
+</html>

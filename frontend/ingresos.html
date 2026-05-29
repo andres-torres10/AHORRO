@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Ingresos - Ingeniería del Ahorro</title>
+  <link rel="stylesheet" href="css/variables.css">
+  <link rel="stylesheet" href="css/main.css">
+</head>
+<body>
+<div id="appLayout" class="app-layout"></div>
+
+<script src="js/api.js"></script>
+<script src="js/layout.js"></script>
+<script>
+if (!Auth.requireAuth()) throw new Error();
+
+document.getElementById('appLayout').innerHTML = `
+  ${renderLayout('ingresos.html')}
+  <div class="main-content" id="mainContent">
+    ${renderTopbar('Ingresos', 'Gestiona tus fuentes de ingreso', true)}
+    <div class="page-content">
+
+      <div class="page-header">
+        <div>
+          <h2>Mis Ingresos</h2>
+          <p>Registra y controla todas tus fuentes de ingreso</p>
+        </div>
+        <button class="btn btn-success" onclick="openModal()">+ Agregar Ingreso</button>
+      </div>
+
+      <div class="stats-grid" style="grid-template-columns:repeat(3,1fr);margin-bottom:24px" id="ingresosStats">
+        <div class="stat-card" style="--card-color:#27AE60;--card-bg:#D5F5E3">
+          <div class="stat-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></div>
+          <div class="stat-label">Total del Mes</div>
+          <div class="stat-value text-success" id="totalMes">$0</div>
+        </div>
+        <div class="stat-card" style="--card-color:#1B4F72;--card-bg:rgba(27,79,114,0.1)">
+          <div class="stat-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg></div>
+          <div class="stat-label">Registros</div>
+          <div class="stat-value" id="totalRegistros">0</div>
+        </div>
+        <div class="stat-card" style="--card-color:#F39C12;--card-bg:#FDEBD0">
+          <div class="stat-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg></div>
+          <div class="stat-label">Promedio</div>
+          <div class="stat-value text-warning" id="promedio">$0</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">Listado de Ingresos</span>
+          <div style="display:flex;gap:10px;align-items:center">
+            <div class="search-box">
+              <span class="search-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></span>
+              <input type="text" class="form-control" id="searchInput" placeholder="Buscar..." style="width:200px" oninput="filterTable()">
+            </div>
+            <select class="form-control" id="filterCategoria" onchange="filterTable()" style="width:150px">
+              <option value="">Todas las categorías</option>
+              <option>Salario</option><option>Freelance</option><option>Negocio</option>
+              <option>Inversión</option><option>Arriendo</option><option>Otro</option>
+            </select>
+          </div>
+        </div>
+        <div class="card-body" style="padding:0">
+          <div class="table-container">
+            <table id="ingresosTable">
+              <thead>
+                <tr>
+                  <th onclick="sortTable(0)" style="cursor:pointer">Nombre ↕</th>
+                  <th onclick="sortTable(1)" style="cursor:pointer">Categoría ↕</th>
+                  <th onclick="sortTable(2)" style="cursor:pointer">Valor ↕</th>
+                  <th onclick="sortTable(3)" style="cursor:pointer">Fecha ↕</th>
+                  <th>Método Pago</th>
+                  <th>Acciones</th>
+                </tr>
+              </thead>
+              <tbody id="ingresosBody">
+                <tr><td colspan="6" style="text-align:center;padding:40px;color:var(--text-muted)">Cargando...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+`;
+
+Sidebar.init();
+MonthSelector.init();
+MonthSelector.onChange(loadIngresos);
+
+let allIngresos = [];
+let editId = null;
+
+async function loadIngresos(mes, anio) {
+  const res = await Api.get(`/ingresos?mes=${mes}&anio=${anio}`);
+  if (!res?.success) return;
+  allIngresos = res.data || [];
+  renderTable(allIngresos);
+  updateStats(allIngresos);
+}
+
+function updateStats(data) {
+  const total = data.reduce((s, i) => s + parseFloat(i.valor || 0), 0);
+  document.getElementById('totalMes').textContent = Fmt.currency(total);
+  document.getElementById('totalRegistros').textContent = data.length;
+  document.getElementById('promedio').textContent = data.length ? Fmt.currency(total / data.length) : '$0';
+}
+
+function renderTable(data) {
+  const tbody = document.getElementById('ingresosBody');
+  if (!data.length) {
+    tbody.innerHTML = `<tr><td colspan="6"><div class="empty-state"><div class="empty-icon"><svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></div><h3>Sin ingresos</h3><p>Agrega tu primer ingreso del mes</p></div></td></tr>`;
+    return;
+  }
+  tbody.innerHTML = data.map(i => `
+    <tr>
+      <td><strong>${i.nombre}</strong>${i.descripcion ? `<br><small style="color:var(--text-muted)">${i.descripcion}</small>` : ''}</td>
+      <td><span class="badge-status badge-success">${i.categoria}</span></td>
+      <td><strong class="text-success">${Fmt.currency(i.valor)}</strong></td>
+      <td>${Fmt.date(i.fecha)}</td>
+      <td>${i.metodoPago || '-'}</td>
+      <td>
+        <div style="display:flex;gap:6px">
+          <button class="btn btn-outline btn-sm" onclick="editIngreso(${i.id})">Editar</button>
+          <button class="btn btn-danger btn-sm" onclick="deleteIngreso(${i.id})">Eliminar</button>
+        </div>
+      </td>
+    </tr>
+  `).join('');
+}
+
+function filterTable() {
+  const q = document.getElementById('searchInput').value.toLowerCase();
+  const cat = document.getElementById('filterCategoria').value;
+  const filtered = allIngresos.filter(i =>
+    (!q || i.nombre.toLowerCase().includes(q) || (i.descripcion || '').toLowerCase().includes(q)) &&
+    (!cat || i.categoria === cat)
+  );
+  renderTable(filtered);
+  updateStats(filtered);
+}
+
+let sortDir = {};
+function sortTable(col) {
+  sortDir[col] = !sortDir[col];
+  const keys = ['nombre', 'categoria', 'valor', 'fecha'];
+  allIngresos.sort((a, b) => {
+    let va = a[keys[col]], vb = b[keys[col]];
+    if (col === 2) { va = parseFloat(va); vb = parseFloat(vb); }
+    return sortDir[col] ? (va > vb ? 1 : -1) : (va < vb ? 1 : -1);
+  });
+  filterTable();
+}
+
+function openModal(data = null) {
+  editId = data?.id || null;
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay active';
+  overlay.id = 'ingresoModal';
+  overlay.innerHTML = `
+    <div class="modal">
+      <div class="modal-header">
+        <h3 class="modal-title">${editId ? 'Editar Ingreso' : 'Nuevo Ingreso'}</h3>
+        <button class="modal-close" onclick="document.getElementById('ingresoModal').remove()">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label class="form-label">Nombre del ingreso *</label>
+          <input type="text" class="form-control" id="fNombre" value="${data?.nombre || ''}" placeholder="Ej: Salario mensual">
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div class="form-group">
+            <label class="form-label">Categoría *</label>
+            <select class="form-control" id="fCategoria">
+              ${['Salario','Freelance','Negocio','Inversión','Arriendo','Bono','Otro'].map(c =>
+                `<option ${data?.categoria === c ? 'selected' : ''}>${c}</option>`).join('')}
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Método de pago</label>
+            <select class="form-control" id="fMetodo">
+              ${['Transferencia','Efectivo','Cheque','Nequi','Daviplata','Otro'].map(c =>
+                `<option ${data?.metodoPago === c ? 'selected' : ''}>${c}</option>`).join('')}
+            </select>
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div class="form-group">
+            <label class="form-label">Valor (COP) *</label>
+            <input type="number" class="form-control" id="fValor" value="${data?.valor || ''}" placeholder="0" min="0">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Fecha *</label>
+            <input type="date" class="form-control" id="fFecha" value="${data?.fecha || new Date().toISOString().split('T')[0]}">
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Descripción</label>
+          <textarea class="form-control" id="fDesc" rows="2" placeholder="Descripción opcional...">${data?.descripcion || ''}</textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-outline" onclick="document.getElementById('ingresoModal').remove()">Cancelar</button>
+        <button class="btn btn-success" onclick="saveIngreso()">Guardar</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+}
+
+async function saveIngreso() {
+  const body = {
+    nombre: document.getElementById('fNombre').value.trim(),
+    categoria: document.getElementById('fCategoria').value,
+    valor: parseFloat(document.getElementById('fValor').value),
+    fecha: document.getElementById('fFecha').value,
+    descripcion: document.getElementById('fDesc').value.trim(),
+    metodoPago: document.getElementById('fMetodo').value
+  };
+  if (!body.nombre || !body.valor || !body.fecha) {
+    Toast.show('Completa los campos obligatorios', 'warning'); return;
+  }
+  const res = editId
+    ? await Api.put(`/ingresos/${editId}`, body)
+    : await Api.post('/ingresos', body);
+  if (res?.success) {
+    Toast.show(editId ? 'Ingreso actualizado' : 'Ingreso agregado', 'success');
+    document.getElementById('ingresoModal').remove();
+    loadIngresos(MonthSelector.mes, MonthSelector.anio);
+  } else {
+    Toast.show(res?.message || 'Error al guardar', 'error');
+  }
+}
+
+function editIngreso(id) {
+  const item = allIngresos.find(i => i.id === id);
+  if (item) openModal(item);
+}
+
+function deleteIngreso(id) {
+  Confirm.show('¿Eliminar este ingreso? Esta acción no se puede deshacer.', async () => {
+    const res = await Api.delete(`/ingresos/${id}`);
+    if (res?.success) {
+      Toast.show('Ingreso eliminado', 'success');
+      loadIngresos(MonthSelector.mes, MonthSelector.anio);
+    }
+  });
+}
+
+loadIngresos(MonthSelector.mes, MonthSelector.anio);
+</script>
+</body>
+</html>

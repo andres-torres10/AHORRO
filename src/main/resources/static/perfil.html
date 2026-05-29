@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Mi Perfil - Ingeniería del Ahorro</title>
+  <link rel="stylesheet" href="css/variables.css">
+  <link rel="stylesheet" href="css/main.css">
+</head>
+<body>
+<div id="appLayout" class="app-layout"></div>
+<script src="js/api.js"></script>
+<script src="js/layout.js"></script>
+<script>
+if (!Auth.requireAuth()) throw new Error();
+
+document.getElementById('appLayout').innerHTML = `
+  ${renderLayout('perfil.html')}
+  <div class="main-content">
+    ${renderTopbar('Mi Perfil', 'Gestiona tu información personal')}
+    <div class="page-content">
+      <div class="grid-2">
+        <div class="card">
+          <div class="card-header"><span class="card-title">Información Personal</span></div>
+          <div class="card-body">
+            <div style="text-align:center;margin-bottom:24px">
+              <div id="avatarContainer" style="width:100px;height:100px;border-radius:50%;background:var(--primary);display:flex;align-items:center;justify-content:center;font-size:36px;color:white;margin:0 auto 12px;overflow:hidden;cursor:pointer" onclick="document.getElementById('fotoInput').click()">
+                <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="1.5"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+              </div>
+              <input type="file" id="fotoInput" accept="image/*" style="display:none" onchange="subirFoto(this)">
+              <button class="btn btn-outline btn-sm" onclick="document.getElementById('fotoInput').click()">Cambiar foto</button>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">Nombre completo</label>
+              <input type="text" class="form-control" id="pNombre" placeholder="Tu nombre">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Correo electrónico</label>
+              <input type="email" class="form-control" id="pCorreo" disabled style="opacity:0.6">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Nivel de ahorro</label>
+              <input type="text" class="form-control" id="pNivel" disabled style="opacity:0.6">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Miembro desde</label>
+              <input type="text" class="form-control" id="pFecha" disabled style="opacity:0.6">
+            </div>
+            <button class="btn btn-primary" style="width:100%" onclick="guardarPerfil()">Guardar Cambios</button>
+          </div>
+        </div>
+
+        <div>
+          <div class="card" style="margin-bottom:20px">
+            <div class="card-header"><span class="card-title">Cambiar Contraseña</span></div>
+            <div class="card-body">
+              <div class="form-group">
+                <label class="form-label">Contraseña actual</label>
+                <input type="password" class="form-control" id="passActual" placeholder="••••••••">
+              </div>
+              <div class="form-group">
+                <label class="form-label">Nueva contraseña</label>
+                <input type="password" class="form-control" id="passNueva" placeholder="Mínimo 6 caracteres">
+              </div>
+              <div class="form-group">
+                <label class="form-label">Confirmar nueva contraseña</label>
+                <input type="password" class="form-control" id="passConfirm" placeholder="••••••••">
+              </div>
+              <button class="btn btn-warning" style="width:100%" onclick="cambiarPassword()">Cambiar Contraseña</button>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-header"><span class="card-title">Mis Estadísticas</span></div>
+            <div class="card-body" id="statsPersonales">
+              <div style="height:100px;background:var(--gray-light);border-radius:8px"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+`;
+
+Sidebar.init();
+
+async function loadPerfil() {
+  const res = await Api.get('/usuarios/perfil');
+  if (!res?.success) return;
+  const u = res.data;
+  document.getElementById('pNombre').value = u.nombre || '';
+  document.getElementById('pCorreo').value = u.correo || '';
+  document.getElementById('pNivel').value = u.nivelAhorro || 'Principiante';
+  document.getElementById('pFecha').value = u.fechaRegistro ? new Date(u.fechaRegistro).toLocaleDateString('es-CO') : '';
+
+  if (u.fotoPerfil) {
+    document.getElementById('avatarContainer').innerHTML = `<img src="http://localhost:8080${u.fotoPerfil}" style="width:100%;height:100%;object-fit:cover">`;
+  } else {
+    const inicial = u.nombre?.charAt(0).toUpperCase();
+    if (inicial) {
+      document.getElementById('avatarContainer').textContent = inicial;
+    }
+  }
+
+  const [resIng, resGF, resGH, resMetas] = await Promise.all([
+    Api.get(`/ingresos?mes=${new Date().getMonth()+1}&anio=${new Date().getFullYear()}`),
+    Api.get(`/gastos-fijos?mes=${new Date().getMonth()+1}&anio=${new Date().getFullYear()}`),
+    Api.get(`/gastos-hormiga?mes=${new Date().getMonth()+1}&anio=${new Date().getFullYear()}`),
+    Api.get('/metas')
+  ]);
+
+  const totalIng = (resIng?.data || []).reduce((s, i) => s + parseFloat(i.valor || 0), 0);
+  const totalGF = (resGF?.data || []).reduce((s, g) => s + parseFloat(g.valor || 0), 0);
+  const totalGH = (resGH?.data || []).reduce((s, g) => s + parseFloat(g.valor || 0), 0);
+  const metasActivas = (resMetas?.data || []).filter(m => m.estado === 'En progreso').length;
+  const metasComp = (resMetas?.data || []).filter(m => m.estado === 'Completada').length;
+
+  document.getElementById('statsPersonales').innerHTML = `
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <div style="background:var(--gray-light);padding:12px;border-radius:8px;text-align:center">
+        <div style="font-size:1.3rem;font-weight:700;color:var(--success)">${Fmt.currency(totalIng)}</div>
+        <div style="font-size:0.72rem;color:var(--text-muted)">Ingresos este mes</div>
+      </div>
+      <div style="background:var(--gray-light);padding:12px;border-radius:8px;text-align:center">
+        <div style="font-size:1.3rem;font-weight:700;color:var(--danger)">${Fmt.currency(totalGF + totalGH)}</div>
+        <div style="font-size:0.72rem;color:var(--text-muted)">Gastos este mes</div>
+      </div>
+      <div style="background:var(--gray-light);padding:12px;border-radius:8px;text-align:center">
+        <div style="font-size:1.3rem;font-weight:700;color:var(--primary)">${metasActivas}</div>
+        <div style="font-size:0.72rem;color:var(--text-muted)">Metas activas</div>
+      </div>
+      <div style="background:var(--gray-light);padding:12px;border-radius:8px;text-align:center">
+        <div style="font-size:1.3rem;font-weight:700;color:var(--success)">${metasComp}</div>
+        <div style="font-size:0.72rem;color:var(--text-muted)">Metas completadas</div>
+      </div>
+    </div>
+  `;
+}
+
+async function guardarPerfil() {
+  const nombre = document.getElementById('pNombre').value.trim();
+  if (!nombre) { Toast.show('El nombre es obligatorio', 'warning'); return; }
+  const res = await Api.put('/usuarios/perfil', { nombre });
+  if (res?.success) {
+    const user = Api.getUser();
+    if (user) { user.nombre = nombre; localStorage.setItem('user', JSON.stringify(user)); }
+    Toast.show('Perfil actualizado', 'success');
+  } else Toast.show(res?.message || 'Error', 'error');
+}
+
+async function cambiarPassword() {
+  const actual = document.getElementById('passActual').value;
+  const nueva = document.getElementById('passNueva').value;
+  const confirm = document.getElementById('passConfirm').value;
+  if (!actual || !nueva || !confirm) { Toast.show('Completa todos los campos', 'warning'); return; }
+  if (nueva.length < 6) { Toast.show('La contraseña debe tener al menos 6 caracteres', 'warning'); return; }
+  if (nueva !== confirm) { Toast.show('Las contraseñas no coinciden', 'warning'); return; }
+  const res = await Api.post('/usuarios/cambiar-password', { actual, nueva });
+  if (res?.success) {
+    Toast.show('Contraseña actualizada', 'success');
+    document.getElementById('passActual').value = '';
+    document.getElementById('passNueva').value = '';
+    document.getElementById('passConfirm').value = '';
+  } else Toast.show(res?.message || 'Error', 'error');
+}
+
+async function subirFoto(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const formData = new FormData();
+  formData.append('file', file);
+  const token = Api.getToken();
+  const res = await fetch(`${API_BASE}/usuarios/foto`, {
+    method: 'POST',
+    headers: { 'Authorization': `Bearer ${token}` },
+    body: formData
+  });
+  const data = await res.json();
+  if (data.success) {
+    Toast.show('Foto actualizada', 'success');
+    loadPerfil();
+  } else Toast.show('Error al subir foto', 'error');
+}
+
+loadPerfil();
+</script>
+</body>
+</html>

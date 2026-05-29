@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Deudas - Ingeniería del Ahorro</title>
+  <link rel="stylesheet" href="css/variables.css">
+  <link rel="stylesheet" href="css/main.css">
+</head>
+<body>
+<div id="appLayout" class="app-layout"></div>
+<script src="js/api.js"></script>
+<script src="js/layout.js"></script>
+<script>
+if (!Auth.requireAuth()) throw new Error();
+
+document.getElementById('appLayout').innerHTML = `
+  ${renderLayout('deudas.html')}
+  <div class="main-content">
+    ${renderTopbar('Deudas', 'Controla y elimina tus deudas')}
+    <div class="page-content">
+      <div class="page-header">
+        <div><h2>Mis Deudas</h2><p>Gestiona y sigue el progreso de pago</p></div>
+        <button class="btn btn-primary" onclick="openModal()">+ Agregar Deuda</button>
+      </div>
+
+      <div class="stats-grid" style="grid-template-columns:repeat(3,1fr);margin-bottom:24px">
+        <div class="stat-card" style="--card-color:#E74C3C;--card-bg:#FADBD8">
+          <div class="stat-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg></div>
+          <div class="stat-label">Deuda Total</div>
+          <div class="stat-value text-danger" id="deudaTotal">$0</div>
+        </div>
+        <div class="stat-card" style="--card-color:#F39C12;--card-bg:#FDEBD0">
+          <div class="stat-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></div>
+          <div class="stat-label">Cuotas Mensuales</div>
+          <div class="stat-value text-warning" id="cuotasMes">$0</div>
+        </div>
+        <div class="stat-card" style="--card-color:#27AE60;--card-bg:#D5F5E3">
+          <div class="stat-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg></div>
+          <div class="stat-label">Deudas Activas</div>
+          <div class="stat-value text-success" id="deudasActivas">0</div>
+        </div>
+      </div>
+
+      <div id="deudasGrid" class="grid-2"></div>
+    </div>
+  </div>
+`;
+
+Sidebar.init();
+
+let allDeudas = [];
+let editId = null;
+
+async function loadDeudas() {
+  const res = await Api.get('/deudas');
+  if (!res?.success) return;
+  allDeudas = res.data || [];
+  renderDeudas(allDeudas);
+  updateStats(allDeudas);
+}
+
+function updateStats(data) {
+  const activas = data.filter(d => d.estado === 'Activa');
+  const total = activas.reduce((s, d) => s + parseFloat(d.valorTotal || 0) - parseFloat(d.valorPagado || 0), 0);
+  const cuotas = activas.reduce((s, d) => s + parseFloat(d.cuotaMensual || 0), 0);
+  document.getElementById('deudaTotal').textContent = Fmt.currency(total);
+  document.getElementById('cuotasMes').textContent = Fmt.currency(cuotas);
+  document.getElementById('deudasActivas').textContent = activas.length;
+}
+
+function renderDeudas(data) {
+  const grid = document.getElementById('deudasGrid');
+  if (!data.length) {
+    grid.innerHTML = `<div style="grid-column:1/-1"><div class="empty-state card card-body"><div class="empty-icon"><svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg></div><h3>Sin deudas registradas</h3><p>Agrega tus deudas para hacer seguimiento</p></div></div>`;
+    return;
+  }
+  const estadoColor = { Activa: '#E74C3C', Pagada: '#27AE60', Vencida: '#F39C12' };
+  grid.innerHTML = data.map(d => {
+    const pendiente = parseFloat(d.valorTotal || 0) - parseFloat(d.valorPagado || 0);
+    const pct = d.valorTotal > 0 ? (parseFloat(d.valorPagado || 0) / parseFloat(d.valorTotal)) * 100 : 0;
+    return `
+      <div class="card" style="border-top:3px solid ${estadoColor[d.estado] || '#1B4F72'}">
+        <div class="card-body">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px">
+            <div>
+              <h3 style="font-size:1rem;font-weight:700">${d.acreedor}</h3>
+              <span class="badge-status badge-${d.estado === 'Activa' ? 'danger' : d.estado === 'Pagada' ? 'success' : 'warning'}">${d.estado}</span>
+              ${d.tipo ? `<span class="badge-status badge-info" style="margin-left:4px">${d.tipo}</span>` : ''}
+            </div>
+            <div style="display:flex;gap:6px">
+              <button class="btn btn-outline btn-sm" onclick="editDeuda(${d.id})">Editar</button>
+              <button class="btn btn-danger btn-sm" onclick="deleteDeuda(${d.id})">Eliminar</button>
+            </div>
+          </div>
+
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px">
+            <div style="background:var(--gray-light);padding:10px;border-radius:8px">
+              <div style="font-size:0.7rem;color:var(--text-muted)">Deuda Total</div>
+              <div style="font-weight:700;color:var(--danger)">${Fmt.currency(d.valorTotal)}</div>
+            </div>
+            <div style="background:var(--gray-light);padding:10px;border-radius:8px">
+              <div style="font-size:0.7rem;color:var(--text-muted)">Pendiente</div>
+              <div style="font-weight:700;color:var(--warning)">${Fmt.currency(pendiente)}</div>
+            </div>
+            <div style="background:var(--gray-light);padding:10px;border-radius:8px">
+              <div style="font-size:0.7rem;color:var(--text-muted)">Cuota Mensual</div>
+              <div style="font-weight:700">${Fmt.currency(d.cuotaMensual)}</div>
+            </div>
+            <div style="background:var(--gray-light);padding:10px;border-radius:8px">
+              <div style="font-size:0.7rem;color:var(--text-muted)">Interés</div>
+              <div style="font-weight:700">${d.interes || 0}%</div>
+            </div>
+          </div>
+
+          <div>
+            <div style="display:flex;justify-content:space-between;font-size:0.75rem;margin-bottom:4px">
+              <span>Progreso de pago</span>
+              <span style="font-weight:600">${pct.toFixed(1)}%</span>
+            </div>
+            <div class="progress-bar-container">
+              <div class="progress-bar success" style="width:${pct}%"></div>
+            </div>
+          </div>
+
+          ${d.fechaLimite ? `<div style="margin-top:10px;font-size:0.78rem;color:var(--text-muted)">Vence: ${Fmt.date(d.fechaLimite)}</div>` : ''}
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function openModal(data = null) {
+  editId = data?.id || null;
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay active';
+  overlay.id = 'deudaModal';
+  overlay.innerHTML = `
+    <div class="modal">
+      <div class="modal-header">
+        <h3 class="modal-title">${editId ? 'Editar Deuda' : 'Nueva Deuda'}</h3>
+        <button class="modal-close" onclick="document.getElementById('deudaModal').remove()">✕</button>
+      </div>
+      <div class="modal-body">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div class="form-group" style="grid-column:1/-1">
+            <label class="form-label">Acreedor *</label>
+            <input type="text" class="form-control" id="fAcreedor" value="${data?.acreedor || ''}" placeholder="Banco, persona, empresa...">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Tipo</label>
+            <select class="form-control" id="fTipo">
+              ${['Tarjeta','Préstamo','Personal','Hipoteca','Vehículo','Otro'].map(t =>
+                `<option ${data?.tipo === t ? 'selected' : ''}>${t}</option>`).join('')}
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Estado</label>
+            <select class="form-control" id="fEstado">
+              ${['Activa','Pagada','Vencida'].map(e => `<option ${data?.estado === e ? 'selected' : ''}>${e}</option>`).join('')}
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Valor Total *</label>
+            <input type="number" class="form-control" id="fValorTotal" value="${data?.valorTotal || ''}" min="0">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Valor Pagado</label>
+            <input type="number" class="form-control" id="fValorPagado" value="${data?.valorPagado || 0}" min="0">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Cuota Mensual</label>
+            <input type="number" class="form-control" id="fCuota" value="${data?.cuotaMensual || ''}" min="0">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Interés (%)</label>
+            <input type="number" class="form-control" id="fInteres" value="${data?.interes || 0}" min="0" step="0.1">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Fecha Inicio</label>
+            <input type="date" class="form-control" id="fFechaInicio" value="${data?.fechaInicio || ''}">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Fecha Límite</label>
+            <input type="date" class="form-control" id="fFechaLimite" value="${data?.fechaLimite || ''}">
+          </div>
+          <div class="form-group" style="grid-column:1/-1">
+            <label class="form-label">Descripción</label>
+            <textarea class="form-control" id="fDesc" rows="2">${data?.descripcion || ''}</textarea>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-outline" onclick="document.getElementById('deudaModal').remove()">Cancelar</button>
+        <button class="btn btn-primary" onclick="saveDeuda()">Guardar</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+}
+
+async function saveDeuda() {
+  const body = {
+    acreedor: document.getElementById('fAcreedor').value.trim(),
+    tipo: document.getElementById('fTipo').value,
+    estado: document.getElementById('fEstado').value,
+    valorTotal: parseFloat(document.getElementById('fValorTotal').value),
+    valorPagado: parseFloat(document.getElementById('fValorPagado').value) || 0,
+    cuotaMensual: parseFloat(document.getElementById('fCuota').value) || 0,
+    interes: parseFloat(document.getElementById('fInteres').value) || 0,
+    fechaInicio: document.getElementById('fFechaInicio').value || null,
+    fechaLimite: document.getElementById('fFechaLimite').value || null,
+    descripcion: document.getElementById('fDesc').value.trim()
+  };
+  if (!body.acreedor || !body.valorTotal) { Toast.show('Completa los campos obligatorios', 'warning'); return; }
+  const res = editId ? await Api.put(`/deudas/${editId}`, body) : await Api.post('/deudas', body);
+  if (res?.success) {
+    Toast.show('Guardado', 'success');
+    document.getElementById('deudaModal').remove();
+    loadDeudas();
+  } else Toast.show(res?.message || 'Error', 'error');
+}
+
+function editDeuda(id) { openModal(allDeudas.find(d => d.id === id)); }
+
+function deleteDeuda(id) {
+  Confirm.show('¿Eliminar esta deuda?', async () => {
+    const res = await Api.delete(`/deudas/${id}`);
+    if (res?.success) { Toast.show('Eliminada', 'success'); loadDeudas(); }
+  });
+}
+
+loadDeudas();
+</script>
+</body>
+</html>
